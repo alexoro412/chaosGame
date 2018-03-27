@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Page Title</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link href="//fonts.googleapis.com/css?family=Raleway:400,300,600" rel="stylesheet" type="text/css">
+
+    <link rel="stylesheet" href="https://unpkg.com/purecss@1.0.0/build/pure-min.css" integrity="sha384-nn4HPE8lTHyVtfCBi5yW9d20FjT8BJwUXyWZT9InLYax14RDjBj46LmSztkmNP9w"
+        crossorigin="anonymous">
+
+    <script src="pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+</head>
+
+<body>
+    <style>
+        canvas,
+        body {
+            padding: 0;
+            margin: 0;
+        }
+
+        .container {
+            margin: 0 !important;
+            width: 100%;
+        }
+
+        #app {
+            /* position: absolute; */
+            margin: 0;
+            top: 0;
+            left: 0;
+            z-index: 2;
+            background-color: #ffffff;
+        }
+
+        .panel {
+
+            z-index: 10;
+            top: 0;
+            border: 3px solid rgb(29, 197, 248);
+            /* border: 10px solid black; */
+        }
+
+        .sub-panel {
+            margin: 10px;
+        }
+
+        #fixed {
+            position: fixed;
+            z-index: 10;
+        }
+
+        .red-button {
+            background: rgb(219, 127, 127);
+        }
+
+        .centered {
+            display: block;
+            margin: auto;
+        }
+    </style>
+    <div class="pure-g">
+
+        <div id="app" class="pure-u-1-5">
+            <div class="pure-form pure-form-stacked sub-panel">
+                <h2> Chaos Game </h2>
+                <label for="iterations">Iterations</label>
+                <input id="iterations" type="number" v-model="iterations">
+                <button @click="iterate" v-bind:disabled="iterating || handles.length < 2" class="pure-button pure-button-primary" id="drawButton">Draw</button>
+                <button @click="clear" class="pure-button">Clear</button>
+            </div>
+            <table class="pure-table pure-table-horizontal">
+                <thead>
+                    <tr>
+                        <th>Handle Color</th>
+                        <th>Delete?</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="pure-form" v-for="(handle, index) in handles">
+                        <td v-bind:style="{'background-color': '#' + handle.fillColorHex}">
+                            <input class="pure-input-1" type="text" @change="updateColor(handle)" v-model="handle.fillColorHex">
+                        </td>
+                        <td>
+                            <button @click="removeHandle(index)" class="pure-button red-button">&cross;</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">
+                            <button @click="addNewHandle" class="pure-button pure-button-primary centered">Add a handle</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <div style="padding: 1em;">
+                <h3>How it works</h3>
+                <p>The staring point is placed randomly. 
+                    Then, for each iteration, a handle is selected randomly, 
+                    and a new point is drawn halfway between the old point and that handle. 
+                    The new point is given the color of the selected handle.</p>
+                <a href="https://www.youtube.com/watch?v=kbKtFN71Lfs">Numberphile Video</a>
+            </div>
+        </div>
+
+        <div id="canvas-space" class="pure-u-4-5"></div>
+    </div>
+
+
+    <script type="text/javascript">
+        let type = "WebGL";
+        if (!PIXI.utils.isWebGLSupported()) {
+            type = "canvas";
+        }
+
+        PIXI.utils.sayHello(type);
+
+        let app = new PIXI.Application({
+            width: 256,
+            height: 256,
+            antialias: true
+        });
+
+        app.renderer.backgroundColor = 0x061639;
+
+        // USE THIS to set to full size of window
+        app.renderer.view.style.position = "";
+        app.renderer.view.style.display = "block";
+        app.renderer.autoResize = true;
+        app.renderer.resize(window.innerWidth * 4 / 5, window.innerHeight);
+
+        var graphics = new PIXI.Graphics();
+
+        handles = [];
+
+        function createHandle(x, y) {
+            var handle = new PIXI.Graphics();
+
+            handle.interactive = true;
+            handle.buttonMode = true;
+            handle
+                .on('pointerdown', onDragStart)
+                .on('pointerup', onDragEnd)
+                .on('pointerupoutside', onDragEnd)
+                .on('pointermove', onDragMove);
+
+            handle.x = x;
+            handle.y = y;
+            handle.beginFill(Math.floor(Math.random() * 0xFFFFFF));
+            handle.drawCircle(0, 0, 10);
+            handles.push(handle);
+            handle.fillColorHex = handle.fillColor.toString(16).toUpperCase().padStart(6,"0");
+            app.stage.addChild(handle);
+            return handle;
+        }
+
+        for (var i = 0; i < 3; i++) {
+            createHandle(
+                Math.floor(Math.random() * app.screen.width),
+                Math.floor(Math.random() * app.screen.height),
+                "Handle " + (i + 1)
+            )
+        }
+        
+
+        function onDragStart(event) {
+            // store a reference to the data
+            // the reason for this is because of multitouch
+            // we want to track the movement of this particular touch
+            this.data = event.data;
+            this.alpha = 0.5;
+            this.dragging = true;
+        }
+
+        function onDragEnd() {
+            this.alpha = 1;
+            this.dragging = false;
+            // set the interaction data to null
+            this.data = null;
+        }
+
+        function onDragMove() {
+            if (this.dragging) {
+                var newPosition = this.data.getLocalPosition(this.parent);
+                this.x = newPosition.x;
+                this.y = newPosition.y;
+            }
+        }
+
+        app.stage.addChild(graphics);
+
+        document.querySelector('#canvas-space').appendChild(app.view);
+
+        point = {
+            x: Math.random() * app.screen.width,
+            y: Math.random() * app.screen.height
+        };
+
+        function rollDie() {
+            return Math.floor(Math.random() * handles.length);
+        }
+
+        function iterate() {
+            this.iterating = true;
+            setTimeout(function(){
+                for (let i = 0; i < this.iterations; i++) {
+                    let target = handles[rollDie()];
+                    let newX = (target.x + point.x) / 2;
+                    let newY = (target.y + point.y) / 2;
+                    point.x = newX;
+                    point.y = newY;
+                    graphics.beginFill(target.fillColor);
+                    graphics.drawCircle(point.x, point.y, 1);
+                }
+                this.iterating = false;
+            }.bind(this),40);
+            
+        }
+
+        function clear() {
+            graphics.clear();
+            graphics.beginFill(0xD7D7D7);
+        }
+
+        clear();
+    </script>
+
+    <script>
+        var vm = new Vue({
+            el: "#app",
+            data: {
+                drawing: false,
+                iterations: 1000,
+                handles: handles,
+                iterating: false
+            },
+            methods: {
+                iterate: iterate,
+                clear: clear,
+                addNewHandle: function(){
+                    createHandle( 
+                        Math.floor(Math.random() * app.screen.width), 
+                        Math.floor(Math.random() * app.screen.height));
+                    this.nextHandle++;
+                },
+                removeHandle: function(index){
+                    var handleToDelete = this.handles.splice(index, 1)[0];
+                    app.stage.removeChild(handleToDelete);
+                },
+                updateColor: function(handle){
+                    console.log("updating", handle);
+                    handle.clear();
+                    handle.beginFill(parseInt(handle.fillColorHex, 16));
+                    handle.drawCircle(0,0,10);
+                }
+            }
+        })
+    </script>
+</body>
+
+</html>
